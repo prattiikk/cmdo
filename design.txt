@@ -1,0 +1,80 @@
+cli-senpai/
+├── bin/
+│   └── cli-senpai.js                 # Entry point
+├── src/
+│   ├── commands/
+│   │   ├── explain/
+│   │   │   ├── index.js              # Main command handler
+│   │   │   ├── prompt.txt            # AI prompt template
+│   │   │   ├── formatter.js          # Response formatter (chalk)
+│   │   │   └── helpers.js            # Command-specific helpers
+│   │   ├── improve/
+│   │   │   ├── index.js
+│   │   │   ├── prompt.txt
+│   │   │   ├── formatter.js
+│   │   │   └── helpers.js
+│   │   ├── simulate/
+│   │   │   ├── index.js
+│   │   │   ├── prompt.txt
+│   │   │   ├── formatter.js
+│   │   │   └── helpers.js
+│   │   ├── examples/
+│   │   │   ├── index.js
+│   │   │   ├── prompt.txt
+│   │   │   ├── formatter.js
+│   │   │   └── helpers.js
+│   │   ├── breakdown/
+│   │   │   ├── index.js
+│   │   │   ├── prompt.txt
+│   │   │   ├── formatter.js
+│   │   │   └── helpers.js
+│   │   ├── fix-last/
+│   │   │   ├── index.js
+│   │   │   ├── prompt.txt
+│   │   │   ├── formatter.js
+│   │   │   └── helpers.js
+│   │   ├── translate/
+│   │   │   ├── index.js
+│   │   │   ├── prompt.txt
+│   │   │   ├── formatter.js
+│   │   │   └── helpers.js
+│   │   └── config/
+│   │       ├── index.js              # Config commands handler
+│   │       └── formatter.js          # Config output formatter
+│   ├── shared/
+│   │   ├── helpers/
+│   │   │   ├── tldr.js               # TLDR integration
+│   │   │   ├── manpages.js           # Man page parsing
+│   │   │   ├── history.js            # Command history
+│   │   │   ├── os-detection.js       # OS/Shell detection
+│   │   │   ├── safety.js             # Dangerous command detection
+│   │   │   └── validation.js         # Input validation
+│   │   ├── config/
+│   │   │   ├── manager.js            # Config management
+│   │   │   └── schema.js             # Config validation schema
+│   │   └── utils/
+│   │       ├── logger.js             # Logging utilities
+│   │       └── spinner.js            # Loading spinners
+│   ├── providers/
+│   │   ├── server/
+│   │   │   └── index.js              # CLI-Senpai server provider
+│   │   ├── openai-like/
+│   │   │   ├── index.js              # OpenAI-compatible provider
+│   │   │   ├── openai.js             # OpenAI specific config
+│   │   │   ├── anthropic.js          # Anthropic specific config
+│   │   │   └── groq.js               # Groq specific config
+│   │   ├── local/
+│   │   │   └── ollama.js             # Ollama provider
+│   │   └── manager.js                # Provider routing logic
+│   ├── core/
+│   │   ├── router.js                 # Command routing
+│   │   └── base-command.js           # Base command interface
+│   └── data/
+│       ├── dangerous-patterns.json   # Dangerous command patterns
+│       └── command-mappings.json     # Command aliases
+├── config/
+│   └── default.json                  # Default configuration
+└── package.json
+
+this is first version of the cli-senpai project structure
+will definitely evolve as we add more features and commands

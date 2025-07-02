@@ -1,0 +1,22 @@
+# Ignore source and config files
+src/
+test/
+tests/
+.vscode/
+.idea/
+*.ts
+*.tsx
+tsconfig.json
+*.map
+
+# Ignore dotfiles and configs
+.env
+.env.*
+.gitignore
+npm-debug.log*
+*.md
+
+# Ignore build scripts and lockfiles
+package-lock.json
+bun.lockb
+pnpm-lock.yaml
