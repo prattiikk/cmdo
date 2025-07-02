@@ -9,19 +9,28 @@ export interface AskAIResponse {
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
 
-export async function askai(prompt: string): Promise<AskAIResponse> {
+interface AskAIOptions {
+    systemPrompt: string;
+    userPrompt: string;
+    model?: string;
+}
+
+export async function AskAi({
+    systemPrompt,
+    userPrompt,
+    model = "llama-3.3-70b-versatile",
+}: AskAIOptions): Promise<AskAIResponse> {
     try {
         const completion = await groq.chat.completions.create({
-            model: "llama-3.3-70b-versatile",
+            model,
             messages: [
                 {
                     role: "system",
-                    content:
-                        "You are a Linux command-line expert. Given a task, respond with a single line containing one or more shell commands separated by commas. Do not include any explanations, markdown, or extra formatting.",
+                    content: systemPrompt,
                 },
                 {
                     role: "user",
-                    content: prompt,
+                    content: userPrompt,
                 },
             ],
         });
