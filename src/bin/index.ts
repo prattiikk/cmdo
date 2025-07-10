@@ -8,11 +8,12 @@ import { generateFormatter } from "../formatter/generate";
 import { explainFormatter } from "../formatter/explain";
 import { getUserInput } from "../lib/getUserInput";
 import { AskAi } from "../lib/LLMCall";
-import { convertPromptSystem, errorExplainPromptSystem, examplesPromptSystem, explainPromptSystem, generatePromptSystem, improvePromptSystem, teachPromptSystem } from "../prompts/commandPrompts";
+import { convertPromptSystem, errorExplainPromptSystem, examplesPromptSystem, explainPromptSystem, fixPromptSystem, generatePromptSystem, improvePromptSystem, teachPromptSystem } from "../prompts/commandPrompts";
 import { teachFormatter } from "../formatter/teach";
 import { examplesFormatter } from "../formatter/example";
 import { improveFormatter } from "../formatter/improve";
 import { convertFormatter } from "../formatter/convert";
+import { fixFormatter } from "../formatter/fix";
 const program = new Command();
 
 program
@@ -154,14 +155,21 @@ program
 
 
 
+program
+  .command('fix')
+  .description("fixes the given command and suggest some options")
+  .action(async () => {
+
+    const command = await getUserInput({ message: "command" });
+
+    const response = await AskAi({ systemPrompt: fixPromptSystem, userPrompt: command });
+
+    const formattedResponse = await fixFormatter(response.response);
+
+    console.log(formattedResponse);
+  })
 
 
-/* 
-decode-error -> explains the error
-
-fix -> fixes the given command (optional)
-give command - for the given task what are some options or commands that we could use (optional)
-*/
 
 
 
