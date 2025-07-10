@@ -8,8 +8,9 @@ import { generateFormatter } from "../formatter/generate";
 import { explainFormatter } from "../formatter/explain";
 import { getUserInput } from "../lib/getUserInput";
 import { AskAi } from "../lib/LLMCall";
-import { explainPromptSystem, generatePromptSystem, teachPromptSystem } from "../prompts/commandPrompts";
+import { examplesPromptSystem, explainPromptSystem, generatePromptSystem, teachPromptSystem } from "../prompts/commandPrompts";
 import { teachFormatter } from "../formatter/teach";
+import { examplesFormatter } from "../formatter/example";
 const program = new Command();
 
 program
@@ -88,17 +89,29 @@ program
     console.log(formattedResponse);
   })
 
+program
+  .command('example')
+  .description("gives some examples which uses this command")
+  .action(async () => {
+
+    const command = await getUserInput({ message: "command" });
+
+    const response = await AskAi({ systemPrompt: examplesPromptSystem, userPrompt: command });
+
+    const formattedResponse = await examplesFormatter(response.response);
+
+    console.log(formattedResponse);
+  })
 
 
 /* 
-teach -> explains the command what is does and some important flags if it along with examples 
 example -> give some examples of the commands
 improve -> improves or gives better alternative of given command
 translate -> translate the given command to work with other os commands or shells
 decode-error -> explains the error
 
 fix -> fixes the given command (optional)
-
+give command - for the given task what are some options or commands that we could use (optional)
 */
 
 

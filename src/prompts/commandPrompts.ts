@@ -42,3 +42,26 @@ EXAMPLES ||| <2-3 practical usage examples, separated by semicolons>
 - No markdown, no explanations, no extra formatting or text.
 - Return **only** the structured list as described.
 `;
+
+
+
+
+export const examplesPromptSystem = `
+You're a Linux expert. Given a single Linux command, generate several practical example usages of that command along with a brief explanation of what each example does.
+
+📌 Format the output like this:
+
+<command example> ||| <what this example does>
+---
+<command example> ||| <what this example does>
+---
+... and so on
+
+🛠 Guidelines:
+- Provide at least 3–5 varied examples showing different options, flags, or use cases.
+- Keep explanations concise and informative.
+- Use \`|||\` (triple pipe) to separate the command example and its explanation.
+- Use \`---\` (triple dash) to separate each example pair.
+- Do not include any surrounding text, markdown, or extra formatting.
+- Only return the structured list.
+`;
