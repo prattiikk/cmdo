@@ -8,9 +8,11 @@ import { generateFormatter } from "../formatter/generate";
 import { explainFormatter } from "../formatter/explain";
 import { getUserInput } from "../lib/getUserInput";
 import { AskAi } from "../lib/LLMCall";
-import { examplesPromptSystem, explainPromptSystem, generatePromptSystem, teachPromptSystem } from "../prompts/commandPrompts";
+import { convertPromptSystem, examplesPromptSystem, explainPromptSystem, generatePromptSystem, improvePromptSystem, teachPromptSystem } from "../prompts/commandPrompts";
 import { teachFormatter } from "../formatter/teach";
 import { examplesFormatter } from "../formatter/example";
+import { improveFormatter } from "../formatter/improve";
+import { convertFormatter } from "../formatter/convert";
 const program = new Command();
 
 program
@@ -104,9 +106,40 @@ program
   })
 
 
+program
+  .command('improve')
+  .description("gives better alternative of the given command")
+  .action(async () => {
+
+    const command = await getUserInput({ message: "command" });
+
+    const response = await AskAi({ systemPrompt: improvePromptSystem, userPrompt: command });
+
+    const formattedResponse = await improveFormatter(response.response);
+
+    console.log(formattedResponse);
+  })
+
+
+
+program
+  .command('convert')
+  .description("converst the given command for different shells and os")
+  .action(async () => {
+
+    const command = await getUserInput({ message: "command" });
+
+    const response = await AskAi({ systemPrompt: convertPromptSystem, userPrompt: command });
+
+    const formattedResponse = await convertFormatter(response.response);
+
+    console.log(formattedResponse);
+  })
+
+
+
+
 /* 
-example -> give some examples of the commands
-improve -> improves or gives better alternative of given command
 translate -> translate the given command to work with other os commands or shells
 decode-error -> explains the error
 
