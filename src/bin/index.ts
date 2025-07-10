@@ -8,7 +8,8 @@ import { generateFormatter } from "../formatter/generate";
 import { explainFormatter } from "../formatter/explain";
 import { getUserInput } from "../lib/getUserInput";
 import { AskAi } from "../lib/LLMCall";
-import { explainPromptSystem, generatePromptSystem } from "../prompts/commandPrompts";
+import { explainPromptSystem, generatePromptSystem, teachPromptSystem } from "../prompts/commandPrompts";
+import { teachFormatter } from "../formatter/teach";
 const program = new Command();
 
 program
@@ -72,5 +73,35 @@ program
     // print
     console.log(formattedResponse);
   });
+
+program
+  .command('teach')
+  .description("teaches the usage of the given command")
+  .action(async () => {
+
+    const command = await getUserInput({ message: "command : " });
+
+    const response = await AskAi({ systemPrompt: teachPromptSystem, userPrompt: command });
+
+    const formattedResponse = await teachFormatter(response.response);
+
+    console.log(formattedResponse);
+  })
+
+
+
+/* 
+teach -> explains the command what is does and some important flags if it along with examples 
+example -> give some examples of the commands
+improve -> improves or gives better alternative of given command
+translate -> translate the given command to work with other os commands or shells
+decode-error -> explains the error
+
+fix -> fixes the given command (optional)
+
+*/
+
+
+
 
 program.parse(process.argv);

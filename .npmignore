@@ -20,3 +20,7 @@ npm-debug.log*
 package-lock.json
 bun.lockb
 pnpm-lock.yaml
+
+# ignore files
+.npmignore
+.gitignore
