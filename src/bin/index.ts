@@ -8,7 +8,7 @@ import { generateFormatter } from "../formatter/generate";
 import { explainFormatter } from "../formatter/explain";
 import { getUserInput } from "../lib/getUserInput";
 import { AskAi } from "../lib/LLMCall";
-import { convertPromptSystem, examplesPromptSystem, explainPromptSystem, generatePromptSystem, improvePromptSystem, teachPromptSystem } from "../prompts/commandPrompts";
+import { convertPromptSystem, errorExplainPromptSystem, examplesPromptSystem, explainPromptSystem, generatePromptSystem, improvePromptSystem, teachPromptSystem } from "../prompts/commandPrompts";
 import { teachFormatter } from "../formatter/teach";
 import { examplesFormatter } from "../formatter/example";
 import { improveFormatter } from "../formatter/improve";
@@ -137,10 +137,26 @@ program
   })
 
 
+program
+  .command('decode-err')
+  .description("explains the given error and suggest solutions")
+  .action(async () => {
+
+    const command = await getUserInput({ message: "command" });
+
+    const response = await AskAi({ systemPrompt: errorExplainPromptSystem, userPrompt: command });
+
+    const formattedResponse = await explainFormatter(response.response);
+
+    console.log(formattedResponse);
+  })
+
+
+
+
 
 
 /* 
-translate -> translate the given command to work with other os commands or shells
 decode-error -> explains the error
 
 fix -> fixes the given command (optional)
