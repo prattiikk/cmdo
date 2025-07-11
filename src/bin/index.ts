@@ -1,177 +1,176 @@
 #!/usr/bin/env node
 
-console.log("welcome");
-
+import clipboard from "clipboardy";
+import stripAnsi from "strip-ansi";
 import { Command } from "commander";
 import { getConfig } from "../lib/config/helper";
-import { generateFormatter } from "../formatter/generate";
-import { explainFormatter } from "../formatter/explain";
 import { getUserInput } from "../lib/getUserInput";
 import { AskAi } from "../lib/LLMCall";
-import { convertPromptSystem, errorExplainPromptSystem, examplesPromptSystem, explainPromptSystem, fixPromptSystem, generatePromptSystem, improvePromptSystem, teachPromptSystem } from "../prompts/commandPrompts";
-import { teachFormatter } from "../formatter/teach";
-import { examplesFormatter } from "../formatter/example";
-import { improveFormatter } from "../formatter/improve";
-import { convertFormatter } from "../formatter/convert";
-import { fixFormatter } from "../formatter/fix";
+import {
+  convertPromptSystem,
+  errorExplainPromptSystem,
+  examplesPromptSystem,
+  explainPromptSystem,
+  fixPromptSystem,
+  generatePromptSystem,
+  improvePromptSystem,
+  teachPromptSystem,
+} from "../prompts/commandPrompts";
+
+import {
+  generateFormatter,
+  explainFormatter,
+  examplesFormatter,
+  fixFormatter,
+  convertFormatter,
+  improveFormatter,
+  teachFormatter,
+  errorExplainFormatter,
+  FormatterOutput,
+} from "../formatter/formatter";
+
 const program = new Command();
-
-program
-  .name("don")
-  .description(
-    "A cli tool that helps you manage terminal commands using a large language model.",
-  )
-  .version("1.0.0");
-
 const config = getConfig();
 
-
-
-// generate command
-program
-  .command("generate")
-  .description("Generate a command using a large language model.")
-  .action(async () => {
-
-    // get user input
-    const task = await getUserInput({
-      message: "enter the task for which you want to generate a command : ",
+// Error handler wrapper
+const asyncHandler = (fn: (...args: any[]) => Promise<void>) => {
+  return (...args: any[]) =>
+    Promise.resolve(fn(...args)).catch((err) => {
+      console.error("Error:", err.message || err);
+      process.exit(1);
     });
+};
 
-    // call LLM with user input
-    const response = await AskAi({
-      systemPrompt: generatePromptSystem, // promt to the LLM 
-      userPrompt: task // users input passed along with the prompt
-    });
+// Input utility: from args or prompt
+const getInput = async (args: string[], promptMessage: string) => {
+  let input = args.join(" ");
+  if (!input) {
+    input = await getUserInput({ message: promptMessage });
+  }
+  input = input.trim();
+  if (!input) {
+    console.error("Input cannot be empty.");
+    process.exit(1);
+  }
+  return input;
+};
 
-    // format LLM response
-    const formattedResponse = await generateFormatter(response.response);
+// Output: display and copy
+const handleOutput = (formatted: FormatterOutput) => {
+  console.log(formatted.rendered);
+  clipboard.writeSync(stripAnsi(formatted.raw));
+  console.log("Output copied to clipboard.");
+};
 
-    // print 
-    console.log(formattedResponse);
-  });
-
-
-
-
-// explain command
+// Register CLI metadata
 program
-  .command("explain")
-  .description("Generate a command using a large language model.")
-  .action(async () => {
+  .name("don")
+  .description("A CLI tool to generate, explain, convert, and improve terminal commands using AI.")
+  .version("1.0.0");
 
-    // get user input
-    const command = await getUserInput({
-      message: "enter the command you want to get explaination about : ",
-    });
-
-    // call LLM with users input
-    const response = await AskAi({
-      systemPrompt: explainPromptSystem, // LLM prompt for generating explanations
-      userPrompt: command // users input passed aling with the prompt
-    });
-
-    // format LLM response
-    const formattedResponse = await explainFormatter(response.response);
-
-    // print
-    console.log(formattedResponse);
-  });
-
+// Command: generate
 program
-  .command('teach')
-  .description("teaches the usage of the given command")
-  .action(async () => {
+  .command("generate [task...]")
+  .description("Generate a terminal command based on a natural language task description.")
+  .action(
+    asyncHandler(async (args) => {
+      const task = await getInput(args, "Enter the task:");
+      const { response } = await AskAi({ systemPrompt: generatePromptSystem, userPrompt: task });
+      const formatted = generateFormatter(response);
+      handleOutput(formatted);
+    })
+  );
 
-    const command = await getUserInput({ message: "command : " });
-
-    const response = await AskAi({ systemPrompt: teachPromptSystem, userPrompt: command });
-
-    const formattedResponse = await teachFormatter(response.response);
-
-    console.log(formattedResponse);
-  })
-
+// Command: explain
 program
-  .command('example')
-  .description("gives some examples which uses this command")
-  .action(async () => {
+  .command("explain [command...]")
+  .description("Explain what a specific terminal command does.")
+  .action(
+    asyncHandler(async (args) => {
+      const command = await getInput(args, "Enter the command to explain:");
+      const { response } = await AskAi({ systemPrompt: explainPromptSystem, userPrompt: command });
+      const formatted = explainFormatter(response);
+      handleOutput(formatted);
+    })
+  );
 
-    const command = await getUserInput({ message: "command" });
-
-    const response = await AskAi({ systemPrompt: examplesPromptSystem, userPrompt: command });
-
-    const formattedResponse = await examplesFormatter(response.response);
-
-    console.log(formattedResponse);
-  })
-
-
+// Command: teach
 program
-  .command('improve')
-  .description("gives better alternative of the given command")
-  .action(async () => {
+  .command("teach [command...]")
+  .description("Provide a step-by-step guide on how to use a given command.")
+  .action(
+    asyncHandler(async (args) => {
+      const command = await getInput(args, "Enter the command:");
+      const { response } = await AskAi({ systemPrompt: teachPromptSystem, userPrompt: command });
+      const formatted = teachFormatter(response);
+      handleOutput(formatted);
+    })
+  );
 
-    const command = await getUserInput({ message: "command" });
-
-    const response = await AskAi({ systemPrompt: improvePromptSystem, userPrompt: command });
-
-    const formattedResponse = await improveFormatter(response.response);
-
-    console.log(formattedResponse);
-  })
-
-
-
+// Command: example
 program
-  .command('convert')
-  .description("converst the given command for different shells and os")
-  .action(async () => {
+  .command("example [command...]")
+  .description("Show usage examples of the given terminal command.")
+  .action(
+    asyncHandler(async (args) => {
+      const command = await getInput(args, "Enter the command:");
+      const { response } = await AskAi({ systemPrompt: examplesPromptSystem, userPrompt: command });
+      const formatted = examplesFormatter(response);
+      handleOutput(formatted);
+    })
+  );
 
-    const command = await getUserInput({ message: "command" });
-
-    const response = await AskAi({ systemPrompt: convertPromptSystem, userPrompt: command });
-
-    const formattedResponse = await convertFormatter(response.response);
-
-    console.log(formattedResponse);
-  })
-
-
+// Command: improve
 program
-  .command('decode-err')
-  .description("explains the given error and suggest solutions")
-  .action(async () => {
+  .command("improve [command...]")
+  .description("Suggest improved or more efficient alternatives to the given command.")
+  .action(
+    asyncHandler(async (args) => {
+      const command = await getInput(args, "Enter the command:");
+      const { response } = await AskAi({ systemPrompt: improvePromptSystem, userPrompt: command });
+      const formatted = improveFormatter(response);
+      handleOutput(formatted);
+    })
+  );
 
-    const command = await getUserInput({ message: "command" });
-
-    const response = await AskAi({ systemPrompt: errorExplainPromptSystem, userPrompt: command });
-
-    const formattedResponse = await explainFormatter(response.response);
-
-    console.log(formattedResponse);
-  })
-
-
-
-
+// Command: convert
 program
-  .command('fix')
-  .description("fixes the given command and suggest some options")
-  .action(async () => {
+  .command("convert [command...]")
+  .description("Convert the given command to equivalent syntax for different shells or operating systems.")
+  .action(
+    asyncHandler(async (args) => {
+      const command = await getInput(args, "Enter the command:");
+      const { response } = await AskAi({ systemPrompt: convertPromptSystem, userPrompt: command });
+      const formatted = convertFormatter(response);
+      handleOutput(formatted);
+    })
+  );
 
-    const command = await getUserInput({ message: "command" });
+// Command: decode-err
+program
+  .command("decode-err [message...]")
+  .description("Explain an error message and suggest possible fixes.")
+  .action(
+    asyncHandler(async (args) => {
+      const message = await getInput(args, "Enter the error message:");
+      const { response } = await AskAi({ systemPrompt: errorExplainPromptSystem, userPrompt: message });
+      const formatted = errorExplainFormatter(response);
+      handleOutput(formatted);
+    })
+  );
 
-    const response = await AskAi({ systemPrompt: fixPromptSystem, userPrompt: command });
+// Command: fix
+program
+  .command("fix [command...]")
+  .description("Fix a broken or incorrect command and suggest possible intended variations.")
+  .action(
+    asyncHandler(async (args) => {
+      const command = await getInput(args, "Enter the command to fix:");
+      const { response } = await AskAi({ systemPrompt: fixPromptSystem, userPrompt: command });
+      const formatted = fixFormatter(response);
+      handleOutput(formatted);
+    })
+  );
 
-    const formattedResponse = await fixFormatter(response.response);
-
-    console.log(formattedResponse);
-  })
-
-
-
-
-
-
+// Parse CLI
 program.parse(process.argv);
