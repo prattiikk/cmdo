@@ -15,11 +15,12 @@ function ensureConfigDir() {
 function ensureConfigFile() {
   if (!fs.existsSync(CONFIG_PATH)) {
     const defaultConfig = {
-      provider: "server",
+      provider: "server", // or "ollama", "openai", etc.
       serverUrl: "http://localhost:3000",
-      jwt: "",
+      apiKey: "", // optional if user uses OpenAI, Groq etc.
+      jwt: ""     // optional if server uses JWT
     };
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify({ defaultConfig }, null, 2));
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
   }
 }
 

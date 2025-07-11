@@ -4,10 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postinstall": "node dist/lib/scripts/postinstall.js"
   },
   "bin": {
-    "don": "dist/bin/index.js"
+    "senpai": "dist/bin/index.js"
   },
   "keywords": [],
   "author": "",
