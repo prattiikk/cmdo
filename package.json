@@ -15,17 +15,25 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@types/figlet": "^1.7.0",
+    "@types/inquirer": "^9.0.8",
     "@types/node": "^24.0.9",
+    "@types/open": "^6.1.0",
     "typescript": "^5.8.3"
   },
   "dependencies": {
     "axios": "^1.10.0",
+    "boxen": "^7.1.1",
     "chalk": "^5.4.1",
     "clipboardy": "^4.0.0",
     "commander": "^14.0.0",
     "dotenv": "^17.0.1",
     "enquirer": "^2.4.1",
+    "figlet": "^1.8.2",
     "groq-sdk": "^0.26.0",
+    "inquirer": "^9.3.7",
+    "open": "^10.2.0",
+    "ora": "^7.0.1",
     "strip-ansi": "^7.1.0"
   }
 }
