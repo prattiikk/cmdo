@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { getConfig } from "../lib/config/helper";
+import { getConfig, getConfigValue } from "../lib/config/helper";
 import Groq from "groq-sdk";
 import axios from "axios";
 
@@ -31,8 +31,9 @@ export async function AskAi({
         case "ollama":
             return callOllama(systemPrompt, userPrompt, model, config.ollamaUrl);
         case "server":
+            return callCustomServer(systemPrompt, userPrompt);
         default:
-            return callCustomServer(systemPrompt, userPrompt, config.serverUrl);
+            return callCustomServer(systemPrompt, userPrompt);
     }
 }
 
@@ -57,6 +58,12 @@ async function callGroq(systemPrompt: string, userPrompt: string, apiKey: string
     }
 }
 
+
+
+
+
+
+
 async function callOllama(systemPrompt: string, userPrompt: string, model: string, baseUrl = "http://localhost:11434"): Promise<AskAIResponse> {
     if (!baseUrl) return { response: "", error: "Ollama base URL is missing. Set it using: don config --set ollamaUrl <url>" };
 
@@ -77,18 +84,37 @@ async function callOllama(systemPrompt: string, userPrompt: string, model: strin
     }
 }
 
-async function callCustomServer(systemPrompt: string, userPrompt: string, serverUrl: string): Promise<AskAIResponse> {
-    if (!serverUrl) return { response: "", error: "Server URL is missing. Set it using: don config --set serverUrl <url>" };
+
+
+
+
+
+
+async function callCustomServer(systemPrompt: string, userPrompt: string): Promise<AskAIResponse> {
+    const serverUrl = "http://localhost:3000";
+    const token = getConfigValue("jwt");
+
+    console.log("Calling custom server at:", serverUrl);
+    console.log("JWT token present?", !!token);
 
     try {
-        const res = await axios.post(`${serverUrl}/api/ask`, {
-            systemPrompt,
-            userPrompt
-        });
+        const res = await axios.post(
+            `${serverUrl}/api/askai`,
+            {
+                systemPrompt,
+                userPrompt,
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            }
+        );
 
         const result = res.data?.response?.trim() || "";
         return { response: result };
     } catch (err: any) {
+        console.error("Axios error:", err?.response?.data || err.message);
         return { response: "", error: `Server error: ${err.message}` };
     }
 }

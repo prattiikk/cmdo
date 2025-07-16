@@ -1,9 +1,20 @@
 #!/usr/bin/env node
-
+//@ts-nocheck
 import clipboard from "clipboardy";
+import chalk from "chalk";
+import ora from "ora";
 import stripAnsi from "strip-ansi";
 import { Command } from "commander";
-import { getConfig, getConfigValue, setConfigValue, validateConfig } from "../lib/config/helper";
+import { confirm, select, input } from "@inquirer/prompts";
+import figlet from "figlet";
+import boxen from "boxen";
+import gradient from "gradient-string";
+
+// Import your existing modules
+import {
+  getConfig, getConfigValue, setConfigValue, validateConfig, deleteConfig,
+  CONFIG_PATH,
+} from "../lib/config/helper";
 import { getUserInput } from "../lib/getUserInput";
 import { AskAi } from "../lib/LLMCall";
 import { needsSetup, runSetup } from "../lib/setup/setupMenu";
@@ -30,28 +41,110 @@ import {
   FormatterOutput,
 } from "../formatter/formatter";
 
+// Types
 interface ConfigOptions {
   set?: [string, string];
   get?: string;
   show?: boolean;
   setup?: boolean;
+  validate?: boolean;
+  delete?: boolean;
 }
 
 interface AskAiResponse {
   response: string;
 }
 
-interface GetUserInputOptions {
-  message: string;
-}
+// UI Helper Functions
+const showBanner = (): void => {
+  if (!process.stdout.isTTY) return;
 
-const program = new Command();
+  // console.clear();
+  // const banner = figlet.textSync('SENPAI', {
+  //   font: 'ANSI Shadow',
+  //   horizontalLayout: 'default',
+  //   verticalLayout: 'default'
+  // });
 
-// Error handler wrapper with improved error handling
-const asyncHandler = (fn: (...args: any[]) => Promise<void>): ((...args: any[]) => void) => {
+  // console.log(gradient.rainbow(banner));
+  console.log(chalk.dim('hey boss!\n'));
+};
+
+const showSuccess = (message: string): void => {
+  console.log(chalk.green(`✅ ${message}`));
+};
+
+const showError = (message: string): void => {
+  console.log(chalk.red(`❌ ${message}`));
+};
+
+const showWarning = (message: string): void => {
+  console.log(chalk.yellow(`⚠️  ${message}`));
+};
+
+const showInfo = (message: string): void => {
+  console.log(chalk.blue(`ℹ️  ${message}`));
+};
+
+const showOutput = (content: string, title: string = 'Output'): void => {
+  const box = boxen(content, {
+    title: `📋 ${title}`,
+    titleAlignment: 'center',
+    padding: 1,
+    margin: 1,
+    borderStyle: 'round',
+    borderColor: 'blue'
+  });
+  console.log(box);
+};
+
+const createSpinner = (message: string) => {
+  return ora({
+    text: message,
+    spinner: 'dots',
+    color: 'cyan'
+  });
+};
+
+// Core Utility Functions
+const getInput = async (args: string[], promptMessage: string): Promise<string> => {
+  let inputText = args.join(" ").trim();
+
+  if (!inputText) {
+    try {
+      inputText = await input({
+        message: promptMessage,
+        validate: (value) => value.trim() !== '' || 'Input cannot be empty'
+      });
+    } catch (error) {
+      showError(`Failed to get input: ${error.message}`);
+      process.exit(1);
+    }
+  }
+
+  return inputText.trim();
+};
+
+const handleOutput = (formatted: FormatterOutput, title: string = "Output"): void => {
+  try {
+    showOutput(formatted.rendered, title);
+
+    // Copy to clipboard
+    try {
+      clipboard.writeSync(stripAnsi(formatted.raw));
+      showSuccess("Output copied to clipboard!");
+    } catch (clipboardError) {
+      showWarning("Could not copy to clipboard");
+    }
+  } catch (error) {
+    showError(`Error handling output: ${error.message}`);
+  }
+};
+
+const asyncHandler = (fn: (...args: any[]) => Promise<void>) => {
   return (...args: any[]) =>
     Promise.resolve(fn(...args)).catch((err: Error) => {
-      console.error("Error:", err.message || err);
+      showError(err.message || "An unexpected error occurred");
       if (process.env.DEBUG) {
         console.error("Stack trace:", err.stack);
       }
@@ -59,298 +152,345 @@ const asyncHandler = (fn: (...args: any[]) => Promise<void>): ((...args: any[]) 
     });
 };
 
-// Setup check wrapper - runs setup if needed before executing command
-const withSetupCheck = (fn: (...args: any[]) => Promise<void>): ((...args: any[]) => Promise<void>) => {
+const withSetupCheck = (fn: (...args: any[]) => Promise<void>) => {
   return async (...args: any[]) => {
     if (needsSetup()) {
-      console.log("🔧 First time setup required...\n");
+      showInfo("First time setup required...");
       await runSetup();
-      console.log(); // Add spacing
+      console.log();
     }
     return fn(...args);
   };
 };
 
-// Input utility: from args or prompt with enhanced validation
-const getInput = async (args: string[], promptMessage: string): Promise<string> => {
-  let input = args.join(" ").trim();
+// AI Command Functions
+const executeAICommand = async (
+  args: string[],
+  promptMessage: string,
+  systemPrompt: string,
+  formatter: (response: string) => FormatterOutput,
+  loadingMessage: string,
+  title: string
+): Promise<void> => {
+  const userInput = await getInput(args, promptMessage);
+  const spinner = createSpinner(loadingMessage).start();
 
-  if (!input) {
-    try {
-      input = await getUserInput({ message: promptMessage } as GetUserInputOptions);
-      input = input.trim();
-    } catch (error) {
-      console.error("Failed to get user input:", error instanceof Error ? error.message : error);
-      process.exit(1);
-    }
-  }
-
-  if (!input) {
-    console.error("Input cannot be empty.");
-    process.exit(1);
-  }
-
-  return input;
-};
-
-// Output handler with error handling for clipboard operations
-const handleOutput = (formatted: FormatterOutput): void => {
   try {
-    console.log(formatted.rendered);
+    const { response } = await AskAi({
+      systemPrompt,
+      userPrompt: userInput
+    });
+    spinner.stop();
 
-    // Attempt to copy to clipboard with fallback
-    try {
-      clipboard.writeSync(stripAnsi(formatted.raw));
-      console.log("Output copied to clipboard.");
-    } catch (clipboardError) {
-      console.warn("Warning: Could not copy to clipboard:",
-        clipboardError instanceof Error ? clipboardError.message : clipboardError);
-    }
+    const formatted = formatter(response);
+    handleOutput(formatted, title);
   } catch (error) {
-    console.error("Error handling output:", error instanceof Error ? error.message : error);
+    spinner.stop();
+    showError(`Failed: ${error.message}`);
   }
 };
 
-// Register CLI metadata
-program
-  .name("senpai")
-  .description("A CLI tool to generate, explain, convert, and improve terminal commands using AI.")
-  .version("1.0.0")
-  .helpOption("-h, --help", "Display help for command")
-  .addHelpText('after', `
-Examples:
-  $ senpai generate "list all files in current directory"
-  $ senpai explain "ls -la"
-  $ senpai teach "grep"
-  $ senpai examples "find"
-  $ senpai improve "ps aux | grep node"
-  $ senpai convert "ls -la" 
-  $ senpai decode-err "command not found: npm"
-  $ senpai fix "ls -ll"
-  $ senpai config --show
-  $ senpai config --setup
-  $ senpai config --set provider openai
-  $ senpai config --get provider
-
-Documentation:
-  For detailed usage instructions and examples, please refer to the project documentation.
-`);
-
-// Command: generate
-program
-  .command("generate [task...]")
-  .alias("gen")
-  .description("Generate a terminal command based on a natural language task description.")
-  .action(
-    asyncHandler(withSetupCheck(async (args: string[]) => {
-      const task = await getInput(args, "Enter the task:");
-      console.log("Generating command...");
-      const { response }: AskAiResponse = await AskAi({ systemPrompt: generatePromptSystem, userPrompt: task });
-      const formatted = generateFormatter(response);
-      handleOutput(formatted);
-    }))
+// Command Implementations
+const generateCommand = async (args: string[]): Promise<void> => {
+  await executeAICommand(
+    args,
+    "What do you want to do?",
+    generatePromptSystem,
+    generateFormatter,
+    "🤖 Generating command...",
+    "Generated Command"
   );
+};
 
-// Command: explain
-program
-  .command("explain [command...]")
-  .alias("exp")
-  .description("Explain what a specific terminal command does.")
-  .action(
-    asyncHandler(withSetupCheck(async (args: string[]) => {
-      const command = await getInput(args, "Enter the command to explain:");
-      console.log("Explaining command...");
-      const { response }: AskAiResponse = await AskAi({ systemPrompt: explainPromptSystem, userPrompt: command });
-      const formatted = explainFormatter(response);
-      handleOutput(formatted);
-    }))
+const explainCommand = async (args: string[]): Promise<void> => {
+  await executeAICommand(
+    args,
+    "Which command would you like explained?",
+    explainPromptSystem,
+    explainFormatter,
+    "📚 Analyzing command...",
+    "Command Explanation"
   );
+};
 
-// Command: teach
-program
-  .command("teach [command...]")
-  .description("Provide a step-by-step guide on how to use a given command.")
-  .action(
-    asyncHandler(withSetupCheck(async (args: string[]) => {
-      const command = await getInput(args, "Enter the command:");
-      console.log("Creating tutorial...");
-      const { response }: AskAiResponse = await AskAi({ systemPrompt: teachPromptSystem, userPrompt: command });
-      const formatted = teachFormatter(response);
-      handleOutput(formatted);
-    }))
+const teachCommand = async (args: string[]): Promise<void> => {
+  await executeAICommand(
+    args,
+    "Which command would you like to learn?",
+    teachPromptSystem,
+    teachFormatter,
+    "👨‍🏫 Creating tutorial...",
+    "Tutorial"
   );
+};
 
-// Command: examples
-program
-  .command("examples [command...]")
-  .alias("ex")
-  .description("Show usage examples of the given terminal command.")
-  .action(
-    asyncHandler(withSetupCheck(async (args: string[]) => {
-      const command = await getInput(args, "Enter the command:");
-      console.log("Finding examples...");
-      const { response }: AskAiResponse = await AskAi({ systemPrompt: examplesPromptSystem, userPrompt: command });
-      const formatted = examplesFormatter(response);
-      handleOutput(formatted);
-    }))
+const examplesCommand = async (args: string[]): Promise<void> => {
+  await executeAICommand(
+    args,
+    "Show examples for which command?",
+    examplesPromptSystem,
+    examplesFormatter,
+    "💡 Finding examples...",
+    "Examples"
   );
+};
 
-// Command: improve
-program
-  .command("improve [command...]")
-  .alias("imp")
-  .description("Suggest improved or more efficient alternatives to the given command.")
-  .action(
-    asyncHandler(withSetupCheck(async (args: string[]) => {
-      const command = await getInput(args, "Enter the command:");
-      console.log("Analyzing for improvements...");
-      const { response }: AskAiResponse = await AskAi({ systemPrompt: improvePromptSystem, userPrompt: command });
-      const formatted = improveFormatter(response);
-      handleOutput(formatted);
-    }))
+const improveCommand = async (args: string[]): Promise<void> => {
+  await executeAICommand(
+    args,
+    "Which command would you like to improve?",
+    improvePromptSystem,
+    improveFormatter,
+    "⚡ Analyzing for improvements...",
+    "Improvements"
   );
+};
 
-// Command: convert
-program
-  .command("convert [command...]")
-  .alias("conv")
-  .description("Convert the given command to equivalent syntax for different shells or operating systems.")
-  .action(
-    asyncHandler(withSetupCheck(async (args: string[]) => {
-      const command = await getInput(args, "Enter the command:");
-      console.log("Converting command...");
-      const { response }: AskAiResponse = await AskAi({ systemPrompt: convertPromptSystem, userPrompt: command });
-      const formatted = convertFormatter(response);
-      handleOutput(formatted);
-    }))
+const convertCommand = async (args: string[]): Promise<void> => {
+  await executeAICommand(
+    args,
+    "Which command would you like to convert?",
+    convertPromptSystem,
+    convertFormatter,
+    "🔄 Converting command...",
+    "Converted Commands"
   );
+};
 
-// Command: decode-err
-program
-  .command("decode-err [message...]")
-  .alias("err")
-  .description("Explain an error message and suggest possible fixes.")
-  .action(
-    asyncHandler(withSetupCheck(async (args: string[]) => {
-      const message = await getInput(args, "Enter the error message:");
-      console.log("Analyzing error...");
-      const { response }: AskAiResponse = await AskAi({ systemPrompt: errorExplainPromptSystem, userPrompt: message });
-      const formatted = errorExplainFormatter(response);
-      handleOutput(formatted);
-    }))
+const debugCommand = async (args: string[]): Promise<void> => {
+  await executeAICommand(
+    args,
+    "What error message would you like to debug?",
+    errorExplainPromptSystem,
+    errorExplainFormatter,
+    "🐛 Analyzing error...",
+    "Error Analysis"
   );
+};
 
-// Command: fix
-program
-  .command("fix [command...]")
-  .description("Fix a broken or incorrect command and suggest possible intended variations.")
-  .action(
-    asyncHandler(withSetupCheck(async (args: string[]) => {
-      const command = await getInput(args, "Enter the command to fix:");
-      console.log("Fixing command...");
-      const { response }: AskAiResponse = await AskAi({ systemPrompt: fixPromptSystem, userPrompt: command });
-      const formatted = fixFormatter(response);
-      handleOutput(formatted);
-    }))
+const fixCommand = async (args: string[]): Promise<void> => {
+  await executeAICommand(
+    args,
+    "Which command would you like to fix?",
+    fixPromptSystem,
+    fixFormatter,
+    "🔧 Fixing command...",
+    "Fixed Command"
   );
+};
 
-// Command: config
-program
-  .command("config")
-  .description("Manage CLI configuration settings")
-  .option("--set <key> <value>", "Set config key-value pair (e.g., --set provider ollama)")
-  .option("--get <key>", "Get value of a config key")
-  .option("--show", "Show entire config file")
-  .option("--setup", "Run the interactive setup wizard")
-  .option("--validate", "Validate current configuration")
-  .action(asyncHandler(async (options: ConfigOptions & { validate?: boolean }) => {
-    try {
-      if (options.setup) {
-        await runSetup();
-      } else if (options.set) {
-        const [key, value] = options.set;
-        if (!key || value === undefined) {
-          console.error("Invalid format. Use: senpai config --set <key> <value>");
-          console.log("Example: senpai config --set provider openai");
-          process.exit(1);
-        }
-        setConfigValue(key, value);
-        console.log(`Configuration updated: ${key} = ${value}`);
-      } else if (options.get) {
-        const value = getConfigValue(options.get);
-        if (value !== undefined) {
-          console.log(`${options.get} = ${value}`);
-        } else {
-          console.log(`Configuration key '${options.get}' not found`);
-        }
-      } else if (options.show) {
-        const config = getConfig();
-        console.log("Current configuration:");
-        console.log(JSON.stringify(config, null, 2));
-      } else if (options.validate) {
-        const isValid = validateConfig();
-        if (isValid) {
-          console.log("✅ Configuration is valid");
-        } else {
-          console.log("❌ Configuration is invalid");
-          console.log("Run 'senpai config --setup' to reconfigure");
-        }
-      } else {
-        console.log("Configuration Management");
-        console.log("Use one of the following options:");
-        console.log("  --setup              Run interactive setup wizard");
-        console.log("  --set <key> <value>  Set a configuration value");
-        console.log("  --get <key>          Get a configuration value");
-        console.log("  --show               Show all configuration");
-        console.log("  --validate           Validate current configuration");
-        console.log("");
-        console.log("Examples:");
-        console.log("  senpai config --setup");
-        console.log("  senpai config --show");
-        console.log("  senpai config --set provider openai");
-        console.log("  senpai config --get provider");
-        console.log("  senpai config --validate");
-      }
-    } catch (error) {
-      console.error("Configuration error:", error instanceof Error ? error.message : error);
-      process.exit(1);
-    }
-  }));
+// Config Functions
+const handleConfigSet = (key: string, value: string): void => {
+  if (!key || value === undefined) {
+    showError("Invalid format. Use: --set <key> <value>");
+    return;
+  }
+  setConfigValue(key, value);
+  showSuccess(`Configuration updated: ${key} = ${value}`);
+};
 
-// Add a help command for detailed information
-program
-  .command("help [command]")
-  .description("Show detailed help for a specific command")
-  .action((commandName?: string) => {
-    if (commandName) {
-      const command = program.commands.find(cmd => cmd.name() === commandName);
-      if (command) {
-        command.help();
-      } else {
-        console.log(`Command '${commandName}' not found.`);
-        console.log("Available commands:");
-        program.commands.forEach(cmd => {
-          if (cmd.name() !== "help") {
-            console.log(`  ${cmd.name()} - ${cmd.description()}`);
-          }
-        });
-      }
-    } else {
-      program.help();
-    }
+const handleConfigGet = (key: string): void => {
+  const value = getConfigValue(key);
+  if (value !== undefined) {
+    console.log(chalk.cyan(`${key} = ${value}`));
+  } else {
+    showWarning(`Configuration key '${key}' not found`);
+  }
+};
+
+const handleConfigShow = (): void => {
+  const config = getConfig();
+  showOutput(JSON.stringify(config, null, 2), "Configuration");
+};
+
+const handleConfigValidate = (): void => {
+  const spinner = createSpinner("Validating configuration...").start();
+  const isValid = validateConfig();
+  spinner.stop();
+
+  if (isValid) {
+    showSuccess("Configuration is valid");
+  } else {
+    showError("Configuration is invalid. Run 'senpai config --setup' to fix it.");
+  }
+};
+
+const handleConfigDelete = async (): Promise<void> => {
+  const shouldDelete = await confirm({
+    message: "Are you sure you want to delete the configuration?",
+    default: false
   });
 
-// Handle unknown commands
-program.on('command:*', (operands: string[]) => {
-  console.error(`Unknown command: ${operands[0]}`);
-  console.log("Run 'senpai --help' to see available commands.");
-  process.exit(1);
-});
+  if (shouldDelete) {
+    deleteConfig();
+    showSuccess(`Configuration deleted at ${CONFIG_PATH}`);
+  }
+};
 
-// Parse CLI arguments
-program.parse(process.argv);
+const showConfigMenu = async (): Promise<void> => {
+  const choice = await select({
+    message: "What would you like to do?",
+    choices: [
+      { name: "🔧 Run setup wizard", value: "setup" },
+      { name: "👀 Show configuration", value: "show" },
+      { name: "✅ Validate configuration", value: "validate" },
+      { name: "🗑️  Delete configuration", value: "delete" },
+      { name: "❌ Exit", value: "exit" }
+    ]
+  });
 
-// Show help if no arguments provided
-if (!process.argv.slice(2).length) {
-  program.outputHelp();
-}
+  switch (choice) {
+    case "setup":
+      await runSetup();
+      showSuccess("Setup completed!");
+      break;
+    case "show":
+      handleConfigShow();
+      break;
+    case "validate":
+      handleConfigValidate();
+      break;
+    case "delete":
+      await handleConfigDelete();
+      break;
+    case "exit":
+      break;
+  }
+};
+
+const configCommand = async (options: ConfigOptions): Promise<void> => {
+  try {
+    if (options.setup) {
+      await runSetup();
+      showSuccess("Setup completed successfully!");
+      return;
+    }
+
+    if (options.set) {
+      const [key, value] = options.set;
+      handleConfigSet(key, value);
+      return;
+    }
+
+    if (options.get) {
+      handleConfigGet(options.get);
+      return;
+    }
+
+    if (options.show) {
+      handleConfigShow();
+      return;
+    }
+
+    if (options.validate) {
+      handleConfigValidate();
+      return;
+    }
+
+    if (options.delete) {
+      await handleConfigDelete();
+      return;
+    }
+
+    // Interactive config menu
+    await showConfigMenu();
+  } catch (error) {
+    showError(`Configuration error: ${error.message}`);
+    process.exit(1);
+  }
+};
+
+// Program Setup
+const createProgram = (): Command => {
+  const program = new Command();
+
+  program
+    .name("senpai")
+    .description("🧠 AI-powered terminal command assistant")
+    .version("1.0.0")
+    .helpOption("-h, --help", "Display help")
+    .hook('preAction', showBanner);
+
+  // Register commands
+  program
+    .command("generate [task...]")
+    .alias("gen")
+    .description("🎯 Generate a terminal command from natural language")
+    .action(asyncHandler(withSetupCheck(generateCommand)));
+
+  program
+    .command("explain [command...]")
+    .alias("exp")
+    .description("📖 Explain what a command does")
+    .action(asyncHandler(withSetupCheck(explainCommand)));
+
+  program
+    .command("teach [command...]")
+    .description("🎓 Get a tutorial on how to use a command")
+    .action(asyncHandler(withSetupCheck(teachCommand)));
+
+  program
+    .command("examples [command...]")
+    .alias("ex")
+    .description("💡 Show usage examples")
+    .action(asyncHandler(withSetupCheck(examplesCommand)));
+
+  program
+    .command("improve [command...]")
+    .alias("imp")
+    .description("⚡ Suggest improvements for a command")
+    .action(asyncHandler(withSetupCheck(improveCommand)));
+
+  program
+    .command("convert [command...]")
+    .alias("conv")
+    .description("🔄 Convert command for different shells/OS")
+    .action(asyncHandler(withSetupCheck(convertCommand)));
+
+  program
+    .command("debug [message...]")
+    .alias("err")
+    .description("🐛 Debug error messages")
+    .action(asyncHandler(withSetupCheck(debugCommand)));
+
+  program
+    .command("fix [command...]")
+    .description("🔧 Fix a broken command")
+    .action(asyncHandler(withSetupCheck(fixCommand)));
+
+  program
+    .command("config")
+    .description("⚙️  Manage configuration")
+    .option("--set <key> <value>", "Set config value")
+    .option("--get <key>", "Get config value")
+    .option("--show", "Show config")
+    .option("--setup", "Run setup")
+    .option("--validate", "Validate config")
+    .option("--delete", "Delete config")
+    .action(configCommand);
+
+  return program;
+};
+
+// Main execution
+const main = (): void => {
+  const program = createProgram();
+
+  // Handle unknown commands
+  program.on('command:*', (operands: string[]) => {
+    showError(`Unknown command: ${operands[0]}`);
+    showInfo("Run 'senpai --help' to see available commands");
+    process.exit(1);
+  });
+
+  // Parse arguments
+  program.parse(process.argv);
+
+  // Show help if no arguments
+  if (!process.argv.slice(2).length) {
+    program.outputHelp();
+  }
+};
+
+// Run the program
+main();

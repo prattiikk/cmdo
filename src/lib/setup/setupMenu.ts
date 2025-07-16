@@ -179,6 +179,7 @@ async function handleServerAuth(): Promise<{ jwt: string }> {
         const token = await pollForToken(deviceCode);
         console.log('Received access token:', token);
         setConfigValue("jwt", token);
+        setConfigValue("serverUrl", 'https://localhost:3000/api/askai');
         return { jwt: token as string };
         // Optional: Verify token by making a request to /api/user
         // const user = await axios.get(`https://localhost:3000/api/device`, {

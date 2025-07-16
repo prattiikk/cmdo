@@ -22,6 +22,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@inquirer/prompts": "^7.6.0",
     "axios": "^1.10.0",
     "boxen": "^7.1.1",
     "chalk": "^5.4.1",
@@ -30,6 +31,7 @@
     "dotenv": "^17.0.1",
     "enquirer": "^2.4.1",
     "figlet": "^1.8.2",
+    "gradient-string": "^3.0.0",
     "groq-sdk": "^0.26.0",
     "inquirer": "^9.3.7",
     "open": "^10.2.0",

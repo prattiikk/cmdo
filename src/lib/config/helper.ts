@@ -9,7 +9,7 @@ const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 
 const DEFAULT_CONFIG = {
   provider: "server", // or "ollama", "openai", etc.
-  serverUrl: "http://localhost:3000",
+  serverUrl: "http://localhost:3000/api/askai",
   apiKey: "", // optional if user uses OpenAI, Groq etc.
   jwt: ""     // optional if server uses JWT
 };
