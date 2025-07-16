@@ -14,10 +14,10 @@ import gradient from "gradient-string";
 import {
   getConfig, getConfigValue, setConfigValue, validateConfig, deleteConfig,
   CONFIG_PATH,
-} from "../lib/config/helper";
-import { getUserInput } from "../lib/getUserInput";
-import { AskAi } from "../lib/LLMCall";
-import { needsSetup, runSetup } from "../lib/setup/setupMenu";
+} from "../lib/config/helper.js";
+import { getUserInput } from "../lib/getUserInput.js";
+import { AskAi } from "../lib/LLMCall.js";
+import { needsSetup, runSetup } from "../lib/setup/setupMenu.js";
 import {
   convertPromptSystem,
   errorExplainPromptSystem,
@@ -27,7 +27,7 @@ import {
   generatePromptSystem,
   improvePromptSystem,
   teachPromptSystem,
-} from "../prompts/commandPrompts";
+} from "../prompts/commandPrompts.js";
 
 import {
   generateFormatter,
@@ -39,7 +39,7 @@ import {
   teachFormatter,
   errorExplainFormatter,
   FormatterOutput,
-} from "../formatter/formatter";
+} from "../formatter/formatter.js";
 
 // Types
 interface ConfigOptions {
@@ -154,12 +154,17 @@ const asyncHandler = (fn: (...args: any[]) => Promise<void>) => {
 
 const withSetupCheck = (fn: (...args: any[]) => Promise<void>) => {
   return async (...args: any[]) => {
-    if (needsSetup()) {
-      showInfo("First time setup required...");
-      await runSetup();
-      console.log();
+    try {
+      if (needsSetup()) {
+        showInfo("First time setup required...");
+        await runSetup();
+        console.log();
+      }
+      return await fn(...args);
+    } catch (error) {
+      showError(`Setup check failed: ${error.message}`);
+      throw error;
     }
-    return fn(...args);
   };
 };
 
@@ -173,20 +178,24 @@ const executeAICommand = async (
   title: string
 ): Promise<void> => {
   const userInput = await getInput(args, promptMessage);
-  const spinner = createSpinner(loadingMessage).start();
+  const spinner = createSpinner(loadingMessage);
 
   try {
-    const { response } = await AskAi({
+    spinner.start();
+    const response = await AskAi({
       systemPrompt,
       userPrompt: userInput
     });
     spinner.stop();
 
-    const formatted = formatter(response);
+    // Handle both direct response and wrapped response
+    const responseText = typeof response === 'string' ? response : response.response;
+    const formatted = formatter(responseText);
     handleOutput(formatted, title);
   } catch (error) {
     spinner.stop();
     showError(`Failed: ${error.message}`);
+    throw error;
   }
 };
 
@@ -281,80 +290,169 @@ const fixCommand = async (args: string[]): Promise<void> => {
 
 // Config Functions
 const handleConfigSet = (key: string, value: string): void => {
-  if (!key || value === undefined) {
-    showError("Invalid format. Use: --set <key> <value>");
-    return;
+  try {
+    if (!key || value === undefined) {
+      showError("Invalid format. Use: --set <key> <value>");
+      return;
+    }
+    setConfigValue(key, value);
+    showSuccess(`Configuration updated: ${key} = ${value}`);
+  } catch (error) {
+    showError(`Failed to set config: ${error.message}`);
   }
-  setConfigValue(key, value);
-  showSuccess(`Configuration updated: ${key} = ${value}`);
 };
 
 const handleConfigGet = (key: string): void => {
-  const value = getConfigValue(key);
-  if (value !== undefined) {
-    console.log(chalk.cyan(`${key} = ${value}`));
-  } else {
-    showWarning(`Configuration key '${key}' not found`);
+  try {
+    const value = getConfigValue(key);
+    if (value !== undefined) {
+      console.log(chalk.cyan(`${key} = ${value}`));
+    } else {
+      showWarning(`Configuration key '${key}' not found`);
+    }
+  } catch (error) {
+    showError(`Failed to get config: ${error.message}`);
   }
 };
 
 const handleConfigShow = (): void => {
-  const config = getConfig();
-  showOutput(JSON.stringify(config, null, 2), "Configuration");
+  try {
+    const config = getConfig();
+    showOutput(JSON.stringify(config, null, 2), "Configuration");
+  } catch (error) {
+    showError(`Failed to show config: ${error.message}`);
+  }
 };
 
 const handleConfigValidate = (): void => {
-  const spinner = createSpinner("Validating configuration...").start();
-  const isValid = validateConfig();
-  spinner.stop();
+  const spinner = createSpinner("Validating configuration...");
 
-  if (isValid) {
-    showSuccess("Configuration is valid");
-  } else {
-    showError("Configuration is invalid. Run 'senpai config --setup' to fix it.");
+  try {
+    spinner.start();
+    const isValid = validateConfig();
+    spinner.stop();
+
+    if (isValid) {
+      showSuccess("Configuration is valid");
+    } else {
+      showError("Configuration is invalid. Run 'senpai config --setup' to fix it.");
+    }
+  } catch (error) {
+    spinner.stop();
+    showError(`Validation failed: ${error.message}`);
   }
 };
 
 const handleConfigDelete = async (): Promise<void> => {
-  const shouldDelete = await confirm({
-    message: "Are you sure you want to delete the configuration?",
-    default: false
-  });
+  try {
+    const shouldDelete = await confirm({
+      message: "Are you sure you want to delete the configuration?",
+      default: false
+    });
 
-  if (shouldDelete) {
-    deleteConfig();
-    showSuccess(`Configuration deleted at ${CONFIG_PATH}`);
+    if (shouldDelete) {
+      deleteConfig();
+      showSuccess(`Configuration deleted at ${CONFIG_PATH}`);
+    }
+  } catch (error) {
+    showError(`Failed to delete config: ${error.message}`);
+  }
+};
+
+const menuCommand = async (): Promise<void> => {
+  try {
+    const choice = await select({
+      message: "What would you like to do?",
+      choices: [
+        { name: "🎯 Generate a command", value: "generate" },
+        { name: "📖 Explain a command", value: "explain" },
+        { name: "🎓 Learn a command (Teach)", value: "teach" },
+        { name: "💡 Show usage examples", value: "examples" },
+        { name: "⚡ Improve a command", value: "improve" },
+        { name: "🔄 Convert a command", value: "convert" },
+        { name: "🐛 Debug an error message", value: "debug" },
+        { name: "🔧 Fix a command", value: "fix" },
+        { name: "❌ Exit", value: "exit" }
+      ]
+    });
+
+    if (choice === "exit") {
+      showInfo("Goodbye!");
+      return;
+    }
+
+    const userInput = await input({
+      message: "What is your input?",
+      validate: (val) => val.trim() !== "" || "Input cannot be empty"
+    });
+
+    const args = userInput.trim().split(/\s+/); // Use regex to handle multiple spaces
+
+    const commandMap: Record<string, (args: string[]) => Promise<void>> = {
+      generate: generateCommand,
+      explain: explainCommand,
+      teach: teachCommand,
+      examples: examplesCommand,
+      improve: improveCommand,
+      convert: convertCommand,
+      debug: debugCommand,
+      fix: fixCommand
+    };
+
+    const handler = commandMap[choice];
+    if (handler) {
+      await handler(args);
+    } else {
+      showError(`Unknown command: ${choice}`);
+    }
+  } catch (error) {
+    if (error.name === 'ExitPromptError') {
+      showInfo("Operation cancelled");
+      return;
+    }
+    showError(`Menu command failed: ${error.message}`);
+    throw error;
   }
 };
 
 const showConfigMenu = async (): Promise<void> => {
-  const choice = await select({
-    message: "What would you like to do?",
-    choices: [
-      { name: "🔧 Run setup wizard", value: "setup" },
-      { name: "👀 Show configuration", value: "show" },
-      { name: "✅ Validate configuration", value: "validate" },
-      { name: "🗑️  Delete configuration", value: "delete" },
-      { name: "❌ Exit", value: "exit" }
-    ]
-  });
+  try {
+    const choice = await select({
+      message: "What would you like to do?",
+      choices: [
+        { name: "🔧 Run setup wizard", value: "setup" },
+        { name: "👀 Show configuration", value: "show" },
+        { name: "✅ Validate configuration", value: "validate" },
+        { name: "🗑️  Delete configuration", value: "delete" },
+        { name: "❌ Exit", value: "exit" }
+      ]
+    });
 
-  switch (choice) {
-    case "setup":
-      await runSetup();
-      showSuccess("Setup completed!");
-      break;
-    case "show":
-      handleConfigShow();
-      break;
-    case "validate":
-      handleConfigValidate();
-      break;
-    case "delete":
-      await handleConfigDelete();
-      break;
-    case "exit":
-      break;
+    switch (choice) {
+      case "setup":
+        await runSetup();
+        showSuccess("Setup completed!");
+        break;
+      case "show":
+        handleConfigShow();
+        break;
+      case "validate":
+        handleConfigValidate();
+        break;
+      case "delete":
+        await handleConfigDelete();
+        break;
+      case "exit":
+        showInfo("Goodbye!");
+        break;
+    }
+  } catch (error) {
+    if (error.name === 'ExitPromptError') {
+      showInfo("Operation cancelled");
+      return;
+    }
+    showError(`Config menu failed: ${error.message}`);
+    throw error;
   }
 };
 
@@ -459,6 +557,11 @@ const createProgram = (): Command => {
     .action(asyncHandler(withSetupCheck(fixCommand)));
 
   program
+    .command("menu")
+    .description("🧠 Open interactive AI command menu")
+    .action(asyncHandler(withSetupCheck(menuCommand)));
+
+  program
     .command("config")
     .description("⚙️  Manage configuration")
     .option("--set <key> <value>", "Set config value")
@@ -467,30 +570,52 @@ const createProgram = (): Command => {
     .option("--setup", "Run setup")
     .option("--validate", "Validate config")
     .option("--delete", "Delete config")
-    .action(configCommand);
+    .action(asyncHandler(configCommand));
 
   return program;
 };
 
 // Main execution
 const main = (): void => {
-  const program = createProgram();
+  try {
+    const program = createProgram();
 
-  // Handle unknown commands
-  program.on('command:*', (operands: string[]) => {
-    showError(`Unknown command: ${operands[0]}`);
-    showInfo("Run 'senpai --help' to see available commands");
+    // Handle unknown commands
+    program.on('command:*', (operands: string[]) => {
+      showError(`Unknown command: ${operands[0]}`);
+      showInfo("Run 'senpai --help' to see available commands");
+      process.exit(1);
+    });
+
+    // Parse arguments
+    program.parse(process.argv);
+
+    // Show help if no arguments
+    if (!process.argv.slice(2).length) {
+      program.outputHelp();
+    }
+  } catch (error) {
+    showError(`Application failed to start: ${error.message}`);
     process.exit(1);
-  });
-
-  // Parse arguments
-  program.parse(process.argv);
-
-  // Show help if no arguments
-  if (!process.argv.slice(2).length) {
-    program.outputHelp();
   }
 };
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  showError(`Uncaught Exception: ${error.message}`);
+  if (process.env.DEBUG) {
+    console.error(error.stack);
+  }
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  showError(`Unhandled Promise Rejection: ${reason}`);
+  if (process.env.DEBUG) {
+    console.error('Promise:', promise);
+  }
+  process.exit(1);
+});
 
 // Run the program
 main();
