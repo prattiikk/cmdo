@@ -9,8 +9,7 @@ const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 const defaultConfig = {
     provider: "server",
     serverUrl: "http://localhost:3000",
-    groqApiKey: "",
-    ollamaUrl: "http://localhost:11434"
+
 };
 
 function createDefaultConfig() {
