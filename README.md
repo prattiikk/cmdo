@@ -151,4 +151,10 @@ If you find cmdo useful, consider:
 
 ## License
 
-ISC © [Pratik](https://github.com/prattiikk)
+© 2025 Pratik
+
+cmdo is released under a custom non-commercial license.  
+You are free to use and contribute to this project for personal, educational, or non-commercial purposes only.  
+Selling, sublicensing, redistributing, or publishing this software without explicit written permission is prohibited.  
+
+See the [LICENSE](./LICENSE) file for full details.

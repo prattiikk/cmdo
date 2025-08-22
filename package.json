@@ -1,6 +1,6 @@
 {
   "name": "@prattiikk/cmdo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A CLI tool that simplifies terminal commands — generate, explain, correct, convert, and optimize commands using AI or your own LLM key.",
   "main": "index.js",
   "scripts": {
@@ -30,7 +30,7 @@
     "developer-tools"
   ],
   "author": "Pratik",
-  "license": "ISC",
+  "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/prattiikk/cmdo.git"
