@@ -3,13 +3,14 @@
 import path from "path";
 import fs from "fs";
 import os from "os";
+import { CONFIG } from "../../config";
 
-const CONFIG_DIR = path.join(os.homedir(), ".config", "senpai");
+const CONFIG_DIR = path.join(os.homedir(), ".config", "cmdo");
 const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 
 const DEFAULT_CONFIG = {
   provider: "server", // or "ollama", "openai", etc.
-  serverUrl: "http://localhost:3000/api/askai",
+  serverUrl: CONFIG.BACKEND_URL + "/api/askai",
   apiKey: "", // optional if user uses OpenAI, Groq etc.
   jwt: ""     // optional if server uses JWT
 };

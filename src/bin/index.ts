@@ -4,18 +4,15 @@ import clipboard from "clipboardy";
 import chalk from "chalk";
 import ora from "ora";
 import stripAnsi from "strip-ansi";
-import { Command } from "commander";
+import { Command, program } from "commander";
 import { confirm, select, input } from "@inquirer/prompts";
-import figlet from "figlet";
 import boxen from "boxen";
-import gradient from "gradient-string";
 
 // Import your existing modules
 import {
   getConfig, getConfigValue, setConfigValue, validateConfig, deleteConfig,
   CONFIG_PATH,
 } from "../lib/config/helper.js";
-import { getUserInput } from "../lib/getUserInput.js";
 import { AskAi } from "../lib/LLMCall.js";
 import { needsSetup, runSetup } from "../lib/setup/setupMenu.js";
 import {
@@ -51,25 +48,7 @@ interface ConfigOptions {
   delete?: boolean;
 }
 
-interface AskAiResponse {
-  response: string;
-}
-
 // UI Helper Functions
-const showBanner = (): void => {
-  if (!process.stdout.isTTY) return;
-
-  // console.clear();
-  // const banner = figlet.textSync('SENPAI', {
-  //   font: 'ANSI Shadow',
-  //   horizontalLayout: 'default',
-  //   verticalLayout: 'default'
-  // });
-
-  // console.log(gradient.rainbow(banner));
-  console.log(chalk.dim('hey boss!\n'));
-};
-
 const showSuccess = (message: string): void => {
   console.log(chalk.green(`✅ ${message}`));
 };
@@ -94,6 +73,18 @@ const showOutput = (content: string, title: string = 'Output'): void => {
     margin: 1,
     borderStyle: 'round',
     borderColor: 'blue'
+  });
+  console.log(box);
+};
+
+const showErrorBox = (content: string, title: string = 'Error'): void => {
+  const box = boxen(content, {
+    title: `🚨 ${title}`,
+    titleAlignment: 'center',
+    padding: 1,
+    margin: 1,
+    borderStyle: 'round',
+    borderColor: 'red'
   });
   console.log(box);
 };
@@ -133,7 +124,7 @@ const handleOutput = (formatted: FormatterOutput, title: string = "Output"): voi
     try {
       clipboard.writeSync(stripAnsi(formatted.raw));
       showSuccess("Output copied to clipboard!");
-    } catch (clipboardError) {
+    } catch {
       showWarning("Could not copy to clipboard");
     }
   } catch (error) {
@@ -141,13 +132,34 @@ const handleOutput = (formatted: FormatterOutput, title: string = "Output"): voi
   }
 };
 
+const handleError = (errorMessage: string, provider?: string, model?: string): void => {
+  try {
+    let errorContent = errorMessage;
+
+    if (provider || model) {
+      errorContent += '\n\n';
+      if (provider) errorContent += `Provider: ${provider}\n`;
+      if (model) errorContent += `Model: ${model}`;
+    }
+
+    showErrorBox(errorContent, 'LLM Error');
+
+    // Copy error to clipboard for debugging
+    try {
+      clipboard.writeSync(stripAnsi(errorMessage));
+      showInfo("Error details copied to clipboard for debugging");
+    } catch {
+      // Silently fail clipboard copy for errors
+    }
+  } catch (error) {
+    showError(`Error handling error display: ${error.message}`);
+  }
+};
+
 const asyncHandler = (fn: (...args: any[]) => Promise<void>) => {
   return (...args: any[]) =>
     Promise.resolve(fn(...args)).catch((err: Error) => {
       showError(err.message || "An unexpected error occurred");
-      if (process.env.DEBUG) {
-        console.error("Stack trace:", err.stack);
-      }
       process.exit(1);
     });
 };
@@ -188,14 +200,40 @@ const executeAICommand = async (
     });
     spinner.stop();
 
-    // Handle both direct response and wrapped response
+    if (response.error) {
+      handleError(response.error, response.provider, response.model);
+      return;
+    }
+
     const responseText = typeof response === 'string' ? response : response.response;
+
+    if (!responseText || responseText.trim() === '') {
+      handleError(
+        'No response content received from the AI provider',
+        response.provider,
+        response.model
+      );
+      return;
+    }
+
     const formatted = formatter(responseText);
     handleOutput(formatted, title);
-  } catch (error) {
+  } catch (error: any) {
     spinner.stop();
-    showError(`Failed: ${error.message}`);
-    throw error;
+
+    const message = error?.message || error?.toString() || 'Unknown error';
+
+    if (error?.response?.error || error?.error) {
+      handleError(
+        error.response?.error || error.error,
+        error.response?.provider || error.provider,
+        error.response?.model || error.model
+      );
+    } else {
+      handleError(`Execution Failed: ${message}`);
+    }
+
+    return;
   }
 };
 
@@ -335,7 +373,7 @@ const handleConfigValidate = (): void => {
     if (isValid) {
       showSuccess("Configuration is valid");
     } else {
-      showError("Configuration is invalid. Run 'senpai config --setup' to fix it.");
+      showError("Configuration is invalid. Run 'cmdo config --setup' to fix it.");
     }
   } catch (error) {
     spinner.stop();
@@ -364,20 +402,25 @@ const menuCommand = async (): Promise<void> => {
     const choice = await select({
       message: "What would you like to do?",
       choices: [
-        { name: "🎯 Generate a command", value: "generate" },
-        { name: "📖 Explain a command", value: "explain" },
-        { name: "🎓 Learn a command (Teach)", value: "teach" },
-        { name: "💡 Show usage examples", value: "examples" },
-        { name: "⚡ Improve a command", value: "improve" },
-        { name: "🔄 Convert a command", value: "convert" },
-        { name: "🐛 Debug an error message", value: "debug" },
-        { name: "🔧 Fix a command", value: "fix" },
-        { name: "❌ Exit", value: "exit" }
+        { name: "🎯 Generate Command", value: "generate" },
+        { name: "📖 Explain Command", value: "explain" },
+        { name: "🎓 Learn Command (Tutorial)", value: "teach" },
+        { name: "💡 Usage Examples", value: "examples" },
+        { name: "⚡ Optimize Command", value: "improve" },
+        { name: "🔄 Convert Command (Shell/OS)", value: "convert" },
+        { name: "🐛 Debug Errors", value: "debug" },
+        { name: "🔧 Fix Broken Command", value: "fix" },
+        { name: "⚙️ Configure Settings", value: "config" },
+        { name: "🚪 Exit", value: "exit" }
       ]
     });
 
     if (choice === "exit") {
       showInfo("Goodbye!");
+      return;
+    }
+    if (choice === "config") {
+      showConfigMenu();
       return;
     }
 
@@ -386,7 +429,7 @@ const menuCommand = async (): Promise<void> => {
       validate: (val) => val.trim() !== "" || "Input cannot be empty"
     });
 
-    const args = userInput.trim().split(/\s+/); // Use regex to handle multiple spaces
+    const args = userInput.trim().split(/\s+/);
 
     const commandMap: Record<string, (args: string[]) => Promise<void>> = {
       generate: generateCommand,
@@ -396,7 +439,7 @@ const menuCommand = async (): Promise<void> => {
       improve: improveCommand,
       convert: convertCommand,
       debug: debugCommand,
-      fix: fixCommand
+      fix: fixCommand,
     };
 
     const handler = commandMap[choice];
@@ -414,6 +457,8 @@ const menuCommand = async (): Promise<void> => {
     throw error;
   }
 };
+
+
 
 const showConfigMenu = async (): Promise<void> => {
   try {
@@ -498,16 +543,24 @@ const configCommand = async (options: ConfigOptions): Promise<void> => {
   }
 };
 
+
 // Program Setup
 const createProgram = (): Command => {
   const program = new Command();
 
   program
-    .name("senpai")
+    .name("cmdo")
     .description("🧠 AI-powered terminal command assistant")
     .version("1.0.0")
-    .helpOption("-h, --help", "Display help")
-    .hook('preAction', showBanner);
+    .action(asyncHandler(withSetupCheck(menuCommand)));
+  // .helpOption("-h, --help", "Display help");
+
+  // program
+  //   .command("help", { isDefault: false })
+  //   .description("shows help options")
+  //   .action(() => {
+  //     program.help();  // instead of program.outputHelp()
+  //   });
 
   // Register commands
   program
@@ -556,10 +609,10 @@ const createProgram = (): Command => {
     .description("🔧 Fix a broken command")
     .action(asyncHandler(withSetupCheck(fixCommand)));
 
-  program
-    .command("menu")
-    .description("🧠 Open interactive AI command menu")
-    .action(asyncHandler(withSetupCheck(menuCommand)));
+  // program
+  //   .command("menu")
+  //   .description("🧠 Open interactive AI command menu")
+  //   .action(asyncHandler(withSetupCheck(menuCommand)));
 
   program
     .command("config")
@@ -575,6 +628,11 @@ const createProgram = (): Command => {
   return program;
 };
 
+
+
+
+
+
 // Main execution
 const main = (): void => {
   try {
@@ -583,39 +641,38 @@ const main = (): void => {
     // Handle unknown commands
     program.on('command:*', (operands: string[]) => {
       showError(`Unknown command: ${operands[0]}`);
-      showInfo("Run 'senpai --help' to see available commands");
+      showInfo("Run 'cmdo --help' to see available commands");
       process.exit(1);
     });
 
     // Parse arguments
     program.parse(process.argv);
 
-    // Show help if no arguments
-    if (!process.argv.slice(2).length) {
-      program.outputHelp();
-    }
+    // // Show help if no arguments
+    // if (!process.argv.slice(2).length) {
+    //   program.outputHelp();
+    // }
   } catch (error) {
     showError(`Application failed to start: ${error.message}`);
     process.exit(1);
   }
 };
 
+
+
+
+
 // Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
+process.on('uncaught Exception', (error) => {
   showError(`Uncaught Exception: ${error.message}`);
-  if (process.env.DEBUG) {
-    console.error(error.stack);
-  }
+
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   showError(`Unhandled Promise Rejection: ${reason}`);
-  if (process.env.DEBUG) {
-    console.error('Promise:', promise);
-  }
   process.exit(1);
 });
 
-// Run the program
+
 main();

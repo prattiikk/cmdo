@@ -7,13 +7,13 @@ import figlet from 'figlet';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
-import { updateConfig, CONFIG_PATH, setConfigValue, validateConfig, getConfigValue, getConfig } from '../config/helper';
+import { updateConfig, CONFIG_PATH, setConfigValue, getConfig } from '../config/helper';
 import { initiateDeviceAuth, pollForToken } from '../../auth/startAuth';
 import axios from 'axios';
+import { CONFIG } from '../../config';
 
 const execAsync = promisify(exec);
 
-// Enhanced logging utility
 const logger = {
     info: (message: string, data?: any) => {
         console.info(`[Setup] ${message}`, data ? JSON.stringify(data, null, 2) : '');
@@ -35,14 +35,13 @@ interface ProviderChoice {
     name: string;
     value: string;
     short?: string;
-    disabled?: boolean | string;
 }
 
 const providerChoices: ProviderChoice[] = [
     {
-        name: '☁️  Senpai Cloud (Recommended) - Managed service with auth',
+        name: '☁️  cmdo Cloud (Recommended) - Managed service with auth',
         value: 'server',
-        short: 'Senpai Cloud'
+        short: 'cmdo Cloud'
     },
     {
         name: '🤖 OpenAI - GPT-4 and GPT-3.5 models',
@@ -91,138 +90,57 @@ const providerChoices: ProviderChoice[] = [
     }
 ];
 
-// Enhanced provider information
 const providerInfo = {
     openai: {
         apiKeyUrl: 'https://platform.openai.com/account/api-keys',
         pattern: /^sk-[a-zA-Z0-9]{48}$/,
-        models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-        testEndpoint: 'https://api.openai.com/v1/models'
+        models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo']
     },
     groq: {
         apiKeyUrl: 'https://console.groq.com/keys',
         pattern: /^gsk_[a-zA-Z0-9]{52}$/,
-        models: ['llama3-8b-8192', 'llama3-70b-8192', 'mixtral-8x7b-32768'],
-        testEndpoint: 'https://api.groq.com/openai/v1/models'
+        models: ['llama3-8b-8192', 'llama3-70b-8192', 'mixtral-8x7b-32768']
     },
     claude: {
         apiKeyUrl: 'https://console.anthropic.com/account/keys',
         pattern: /^sk-ant-[a-zA-Z0-9\-_]{95}$/,
-        models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
-        testEndpoint: 'https://api.anthropic.com/v1/messages'
+        models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307']
     },
     openrouterai: {
         apiKeyUrl: 'https://openrouter.ai/keys',
         pattern: /^sk-or-[a-zA-Z0-9\-_]{43}$/,
-        models: ['openai/gpt-4', 'anthropic/claude-3-opus', 'meta-llama/llama-3-8b-instruct'],
-        testEndpoint: 'https://openrouter.ai/api/v1/models'
+        models: ['openai/gpt-4', 'anthropic/claude-3-opus', 'meta-llama/llama-3-8b-instruct']
     },
     togetherai: {
         apiKeyUrl: 'https://api.together.xyz/settings/api-keys',
         pattern: /^[A-Za-z0-9\-_]{40,80}$/,
-        models: ['meta-llama/Llama-2-7b-chat-hf', 'meta-llama/Llama-2-13b-chat-hf'],
-        testEndpoint: 'https://api.together.xyz/v1/models'
+        models: ['meta-llama/Llama-2-7b-chat-hf', 'meta-llama/Llama-2-13b-chat-hf']
     },
     huggingface: {
         apiKeyUrl: 'https://huggingface.co/settings/tokens',
         pattern: /^hf_[a-zA-Z0-9]{37}$/,
-        models: ['microsoft/DialoGPT-medium', 'microsoft/DialoGPT-large'],
-        testEndpoint: 'https://api-inference.huggingface.co/models'
+        models: ['microsoft/DialoGPT-medium', 'microsoft/DialoGPT-large']
     },
     replicate: {
         apiKeyUrl: 'https://replicate.com/account/api-tokens',
         pattern: /^r8_[a-zA-Z0-9]{32}$/,
-        models: ['meta/llama-2-7b-chat', 'meta/llama-2-13b-chat'],
-        testEndpoint: 'https://api.replicate.com/v1/models'
+        models: ['meta/llama-2-7b-chat', 'meta/llama-2-13b-chat']
     },
     deepinfra: {
         apiKeyUrl: 'https://deepinfra.com/dash/api_keys',
         pattern: /^[a-zA-Z0-9]{32}$/,
-        models: ['meta-llama/Llama-2-7b-chat-hf', 'meta-llama/Llama-2-13b-chat-hf'],
-        testEndpoint: 'https://api.deepinfra.com/v1/openai/models'
+        models: ['meta-llama/Llama-2-7b-chat-hf', 'meta-llama/Llama-2-13b-chat-hf']
     }
 };
 
-// Enhanced helper functions
 function getApiKeyInstructions(provider: string): string {
     const info = providerInfo[provider as keyof typeof providerInfo];
-    if (!info) {
-        return 'Please provide your API key:';
-    }
-
-    return `Get your API key from: ${info.apiKeyUrl}`;
+    return info ? `Get your API key from: ${info.apiKeyUrl}` : 'Please provide your API key:';
 }
 
 function validateApiKeyFormat(provider: string, apiKey: string): boolean {
     const info = providerInfo[provider as keyof typeof providerInfo];
-    if (!info?.pattern) {
-        return apiKey.length > 10; // Basic validation
-    }
-
-    return info.pattern.test(apiKey);
-}
-
-async function testApiKey(provider: string, apiKey: string): Promise<void> {
-
-    const info = providerInfo[provider as keyof typeof providerInfo];
-    if (!info?.testEndpoint) {
-        // Skip testing for providers without test endpoints
-        return;
-    }
-
-    try {
-        let headers: Record<string, string> = {};
-        let url = info.testEndpoint;
-
-        switch (provider) {
-            case 'openai':
-            case 'groq':
-            case 'openrouterai':
-            case 'togetherai':
-            case 'deepinfra':
-                headers['Authorization'] = `Bearer ${apiKey}`;
-                break;
-            case 'claude':
-                headers['x-api-key'] = apiKey;
-                headers['anthropic-version'] = '2023-06-01';
-                // For Claude, we need to test with a simple message
-                url = 'https://api.anthropic.com/v1/messages';
-                break;
-            case 'huggingface':
-                headers['Authorization'] = `Bearer ${apiKey}`;
-                break;
-            case 'replicate':
-                headers['Authorization'] = `Token ${apiKey}`;
-                break;
-        }
-
-        if (provider === 'claude') {
-            // Special test for Claude API
-            await axios.post(url, {
-                model: 'claude-3-haiku-20240307',
-                max_tokens: 1,
-                messages: [{ role: 'user', content: 'test' }]
-            }, { headers, timeout: 5000 });
-        } else {
-            await axios.get(url, { headers, timeout: 5000 });
-        }
-
-        logger.info(`API key test successful for ${provider}`);
-    } catch (error: any) {
-        logger.error(`API key test failed for ${provider}:`, error.message);
-
-        if (error.response?.status === 401) {
-            throw new Error('Invalid API key');
-        } else if (error.response?.status === 403) {
-            throw new Error('API key does not have required permissions');
-        } else if (error.response?.status === 429) {
-            throw new Error('API rate limit exceeded');
-        } else if (error.code === 'ECONNABORTED') {
-            throw new Error('Request timeout - API service may be unavailable');
-        } else {
-            throw new Error(`API test failed: ${error.message}`);
-        }
-    }
+    return info?.pattern ? info.pattern.test(apiKey) : apiKey.length > 10;
 }
 
 async function checkOllamaInstalled(): Promise<boolean> {
@@ -250,10 +168,10 @@ async function getOllamaModels(): Promise<string[]> {
     try {
         const { stdout } = await execAsync('ollama list', { timeout: 10000 });
         const models = stdout.split('\n')
-            .slice(1) // Skip header
+            .slice(1)
             .filter(line => line.trim())
             .map(line => line.split(/\s+/)[0])
-            .filter(model => model && !model.includes('NAME')); // Filter out header remnants
+            .filter(model => model && !model.includes('NAME'));
 
         logger.debug('Found Ollama models:', models);
         return models;
@@ -267,7 +185,7 @@ async function installOllamaModel(modelName: string = 'llama3.1:8b'): Promise<vo
     const spinner = ora(`Installing model ${modelName} (this may take a few minutes)...`).start();
 
     try {
-        await execAsync(`ollama pull ${modelName}`, { timeout: 600000 }); // 10 minute timeout
+        await execAsync(`ollama pull ${modelName}`, { timeout: 600000 });
         spinner.succeed(`Model ${modelName} installed successfully!`);
         logger.info(`Successfully installed Ollama model: ${modelName}`);
     } catch (error: any) {
@@ -278,11 +196,10 @@ async function installOllamaModel(modelName: string = 'llama3.1:8b'): Promise<vo
     }
 }
 
-// Enhanced main setup functions
 async function showWelcome(): Promise<void> {
     console.clear();
 
-    const title = figlet.textSync('Senpai CLI', {
+    const title = figlet.textSync('cmdo CLI', {
         font: 'Small',
         horizontalLayout: 'default'
     });
@@ -322,19 +239,7 @@ async function selectProvider(): Promise<string> {
 
 async function handleServerAuth(): Promise<{ jwt: string; serverUrl: string }> {
     try {
-        const { authflow } = await inquirer.prompt([
-            {
-                type: 'confirm',
-                name: 'authflow',
-                message: '🔐 Login to your Senpai Cloud account?',
-                default: true
-            }
-        ]);
-
-        if (!authflow) {
-            throw new Error('Authentication cancelled by user');
-        }
-
+        const serverUrl = getConfig().serverUrl || CONFIG.BACKEND_URL;
         logger.info('Starting device authentication flow');
         const spinner = ora('Initiating authentication...').start();
 
@@ -351,25 +256,11 @@ async function handleServerAuth(): Promise<{ jwt: string; serverUrl: string }> {
 
         logger.info('Authentication successful');
 
-        const serverUrl = process.env.SENPAI_SERVER_URL || 'https://api.senpai.dev';
-
-        // Store configuration
         setConfigValue("jwt", token);
         setConfigValue("serverUrl", serverUrl);
 
-        // Optional: Verify token
-        try {
-            const verifySpinner = ora('Verifying authentication...').start();
-            await axios.get(`${serverUrl}/api/user`, {
-                headers: { Authorization: `Bearer ${token}` },
-                timeout: 5000
-            });
-            verifySpinner.succeed('Authentication verified');
-        } catch (error) {
-            logger.warn('Could not verify authentication, but proceeding:', error);
-        }
-
         return { jwt: token as string, serverUrl };
+
     } catch (error: any) {
         logger.error('Authentication failed:', error);
         throw new Error(`Authentication failed: ${error.message}`);
@@ -406,35 +297,6 @@ async function handleApiKeyInput(provider: string): Promise<{ apiKey: string; mo
         }
     ]);
 
-    // Test API key
-    const spinner = ora('Testing API key...').start();
-
-    try {
-        await testApiKey(provider, apiKey);
-        spinner.succeed('API key validated successfully!');
-    } catch (error: any) {
-        spinner.fail('API key validation failed');
-        logger.error('API key validation error:', error);
-
-        console.log(chalk.red(`❌ ${error.message}`));
-
-        const { retry } = await inquirer.prompt([
-            {
-                type: 'confirm',
-                name: 'retry',
-                message: 'Try again with a different API key?',
-                default: true
-            }
-        ]);
-
-        if (retry) {
-            return handleApiKeyInput(provider);
-        } else {
-            throw new Error('Valid API key required to continue');
-        }
-    }
-
-    // Ask for model selection if available
     let model: string | undefined;
     if (info?.models && info.models.length > 0) {
         const { selectedModel } = await inquirer.prompt([
@@ -503,7 +365,6 @@ async function handleOllamaSetup(): Promise<{ ollamaUrl: string; model?: string 
             spinner.succeed('Ollama is installed');
         }
 
-        // Check if running
         spinner.start('Checking if Ollama is running...');
         const isRunning = await checkOllamaRunning();
 
@@ -526,7 +387,6 @@ async function handleOllamaSetup(): Promise<{ ollamaUrl: string; model?: string 
                 throw new Error('Ollama needs to be running');
             }
 
-            // Check again
             spinner.start('Rechecking Ollama status...');
             const isRunningNow = await checkOllamaRunning();
             if (!isRunningNow) {
@@ -538,7 +398,6 @@ async function handleOllamaSetup(): Promise<{ ollamaUrl: string; model?: string 
             spinner.succeed('Ollama is running');
         }
 
-        // Check models
         spinner.start('Checking available models...');
         const models = await getOllamaModels();
 
@@ -651,10 +510,10 @@ async function showSummary(config: any): Promise<void> {
         configDetails.map(detail => `• ${detail}`).join('\n') +
         '\n\n' +
         chalk.cyan('🚀 Try these commands:\n') +
-        chalk.white('• senpai generate "list all files"\n') +
-        chalk.white('• senpai explain "ls -la"\n') +
-        chalk.white('• senpai config --show\n') +
-        chalk.white('• senpai help'),
+        chalk.white('• cmdo generate "list all files"\n') +
+        chalk.white('• cmdo explain "ls -la"\n') +
+        chalk.white('• cmdo config --show\n') +
+        chalk.white('• cmdo help'),
         {
             padding: 1,
             margin: 1,
@@ -668,12 +527,10 @@ async function showSummary(config: any): Promise<void> {
     logger.info('Setup completed successfully', config);
 }
 
-// Enhanced main setup flow
 export async function runSetup(): Promise<void> {
     try {
-        // Check if already configured
         if (fs.existsSync(CONFIG_PATH)) {
-            const currentConfig = validateConfig();
+            const currentConfig = getConfig();
             if (currentConfig) {
                 const { reconfigure } = await inquirer.prompt([
                     {
@@ -696,28 +553,8 @@ export async function runSetup(): Promise<void> {
         const provider = await selectProvider();
         let config: any = { provider };
 
-        // Handle provider-specific setup
         switch (provider) {
             case 'server':
-                const existingJwt = getConfigValue("jwt");
-                const existingServerUrl = getConfigValue("serverUrl");
-
-                if (existingJwt && existingServerUrl) {
-                    const { useExisting } = await inquirer.prompt([
-                        {
-                            type: 'confirm',
-                            name: 'useExisting',
-                            message: '🔐 Found existing authentication. Use it?',
-                            default: true
-                        }
-                    ]);
-
-                    if (useExisting) {
-                        config = { ...config, jwt: existingJwt, serverUrl: existingServerUrl };
-                        break;
-                    }
-                }
-
                 const auth = await handleServerAuth();
                 config = { ...config, ...auth };
                 break;
@@ -743,7 +580,6 @@ export async function runSetup(): Promise<void> {
                 throw new Error(`Unsupported provider: ${provider}`);
         }
 
-        // Save configuration
         const spinner = ora('Saving configuration...').start();
         try {
             updateConfig(config);
@@ -758,9 +594,8 @@ export async function runSetup(): Promise<void> {
     } catch (error: any) {
         logger.error('Setup failed:', error);
         console.log(chalk.red(`\n❌ Setup failed: ${error.message}`));
-        console.log(chalk.yellow('💡 You can run setup again with: senpai config --setup'));
+        console.log(chalk.yellow('💡 You can run setup again with: cmdo config --setup'));
 
-        // Show troubleshooting tips
         console.log(chalk.gray('\n🔍 Troubleshooting tips:'));
         console.log(chalk.gray('• Check your internet connection'));
         console.log(chalk.gray('• Verify API key format and permissions'));
@@ -771,10 +606,9 @@ export async function runSetup(): Promise<void> {
     }
 }
 
-// Enhanced utility functions
 export function needsSetup(): boolean {
     try {
-        return !fs.existsSync(CONFIG_PATH) || !validateConfig();
+        return !fs.existsSync(CONFIG_PATH) || !getConfig();
     } catch (error) {
         logger.error('Error checking setup status:', error);
         return true;

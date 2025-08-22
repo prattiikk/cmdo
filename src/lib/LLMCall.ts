@@ -4,6 +4,7 @@ dotenv.config();
 import { getConfig, getConfigValue } from "../lib/config/helper";
 import Groq from "groq-sdk";
 import axios, { AxiosError } from "axios";
+import { CONFIG } from "../config";
 
 // Add logging utility
 const logger = {
@@ -17,9 +18,7 @@ const logger = {
         console.warn(`[AI-Provider] ${message}`, data ? JSON.stringify(data, null, 2) : '');
     },
     debug: (message: string, data?: any) => {
-        if (process.env.NODE_ENV === 'development') {
-            console.debug(`[AI-Provider] ${message}`, data ? JSON.stringify(data, null, 2) : '');
-        }
+        // debug
     }
 };
 
@@ -62,14 +61,14 @@ function createSuccessResponse(provider: string, response: string, model?: strin
 // Validation helpers
 function validateApiKey(apiKey: string | undefined, provider: string): string | null {
     if (!apiKey || apiKey.trim() === '') {
-        return `${provider} API key is missing. Set it using: senpai config --set apiKey <your-key>`;
+        return `${provider} API key is missing. Set it using: cmdo config --set apiKey <your-key>`;
     }
     return null;
 }
 
 function validateModel(model: string | undefined, provider: string): string | null {
     if (!model || model.trim() === '') {
-        return `${provider} model name is missing. Set it using: senpai config --set model <model-name>`;
+        return `${provider} model name is missing. Set it using: cmdo config --set model <model-name>`;
     }
     return null;
 }
@@ -165,7 +164,7 @@ async function callGroq(systemPrompt: string, userPrompt: string, model: string,
 
 async function callOllama(systemPrompt: string, userPrompt: string, model: string): Promise<AskAIResponse> {
     const provider = 'Ollama';
-    const baseUrl = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+    const baseUrl = "http://localhost:11434";
 
     const modelError = validateModel(model, provider);
     if (modelError) return createErrorResponse(provider, modelError);
@@ -204,7 +203,7 @@ async function callOllama(systemPrompt: string, userPrompt: string, model: strin
 
 async function callCustomServer(systemPrompt: string, userPrompt: string): Promise<AskAIResponse> {
     const provider = 'CustomServer';
-    const serverUrl = process.env.CUSTOM_SERVER_URL || "http://localhost:3000";
+    const serverUrl = CONFIG.BACKEND_URL || "https://cmdo.vercel.app";
     const token = getConfigValue("jwt");
 
     if (!token) {
@@ -396,8 +395,8 @@ async function callOpenRouter(
                 headers: {
                     Authorization: `Bearer ${apiKey}`,
                     "Content-Type": "application/json",
-                    "HTTP-Referer": process.env.APP_URL || "http://localhost:3000",
-                    "X-Title": process.env.APP_NAME || "AI Assistant",
+                    "HTTP-Referer": CONFIG.BACKEND_URL,
+                    "X-Title": "AI Assistant",
                 },
                 timeout: 30000,
             }

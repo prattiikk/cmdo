@@ -1,19 +1,53 @@
 {
-  "name": "cli",
+  "name": "@prattiikk/cmdo",
   "version": "1.0.0",
-  "description": "",
+  "description": "A CLI tool that simplifies terminal commands — generate, explain, correct, convert, and optimize commands using AI or your own LLM key.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "postinstall": "node dist/lib/scripts/postinstall.js"
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "bin": {
-    "senpai": "dist/bin/index.js"
+    "cmdo": "dist/bin/index.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "cli",
+    "terminal",
+    "commands",
+    "command-line",
+    "automation",
+    "ai",
+    "llm",
+    "chatgpt",
+    "openai",
+    "groq",
+    "explain-commands",
+    "generate-commands",
+    "command-helper",
+    "shell",
+    "bash",
+    "zsh",
+    "developer-tools"
+  ],
+  "author": "Pratik",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/prattiikk/cmdo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/prattiikk/cmdo/issues"
+  },
+  "homepage": "https://cmdo.vercel.app",
   "type": "commonjs",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "devDependencies": {
     "@types/figlet": "^1.7.0",
     "@types/inquirer": "^9.0.8",
@@ -23,6 +57,7 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^7.6.0",
+    "@prattiikk/cmdo": "^1.0.0",
     "axios": "^1.10.0",
     "boxen": "^7.1.1",
     "chalk": "^5.4.1",
